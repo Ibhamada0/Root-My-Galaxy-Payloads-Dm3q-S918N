@@ -1,0 +1,102 @@
+name: Build APK
+
+# GitHub Actions: builds the Root My Galaxy app on every push.
+# - debug APK  -> installable (adb install)
+# - release APK -> unsigned unless signing secrets are set
+# - tag push (v*)-> creates a GitHub Release with the APK attached
+
+on:
+  push:
+    branches: ["main", "master"]
+    tags: ["v*"]
+  pull_request:
+    branches: ["main", "master"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build debug + release APKs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Accept Android SDK licenses
+        run: |
+          yes | "$ANDROID_SDK_ROOT"/cmdline-tools/latest/bin/sdkmanager --licenses >/dev/null 2>&1 || true
+
+      - name: Preinstall NDK / CMake (best-effort)
+        run: |
+          "$ANDROID_SDK_ROOT"/cmdline-tools/latest/bin/sdkmanager --install "ndk;27.1.12297006" "cmake;3.22.1" >/dev/null 2>&1 || echo "sdkmanager install skipped; relying on AGP auto-download"
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Build debug APK
+        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Build release APK
+        run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
+
+      - name: Sign release APK with secrets (optional)
+        if: env.KEYSTORE_BASE64 != '' && env.KEYSTORE_PASSWORD != '' && env.KEY_ALIAS != '' && env.KEY_PASSWORD != ''
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          echo "$KEYSTORE_BASE64" | base64 -d > keystore.jks
+          UNSIGNED=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
+          APKSIGNER=$(find "$ANDROID_SDK_ROOT"/build-tools -name apksigner -type f | sort -V | tail -1)
+          "$APKSIGNER" sign --ks keystore.jks \
+            --ks-pass "pass:$KEYSTORE_PASSWORD" \
+            --ks-key-alias "$KEY_ALIAS" \
+            --key-pass "pass:$KEY_PASSWORD" \
+            --out app-release-signed.apk "$UNSIGNED"
+          "$APKSIGNER" verify --print-certs app-release-signed.apk
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: RootMyGalaxy-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      - name: Upload release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: RootMyGalaxy-release-apk
+          path: |
+            app/build/outputs/apk/release/*.apk
+            app-release-signed.apk
+          if-no-files-found: warn
+
+      - name: Create GitHub Release (on tag push)
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/}"
+          if [ -f app-release-signed.apk ]; then
+            ASSET=app-release-signed.apk
+          else
+            ASSET=$(find app/build/outputs/apk/debug -name "*.apk" | head -1)
+          fi
+          gh release create "$TAG" "$ASSET" \
+            --title "Root My Galaxy SM-S918N $TAG" \
+            --notes "Automated build from GitHub Actions." || true
