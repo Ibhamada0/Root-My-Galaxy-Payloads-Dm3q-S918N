@@ -1,0 +1,22 @@
+{
+  "boot.img": {
+    "size": 100663296,
+    "sha256": "85e3ad7e4a68674370eab147c4335b2828c1f52f315313b82fe4408db39ce0c4"
+  },
+  "kernel": {
+    "size": 46860800,
+    "sha256": "53f7e2dac1a1feca2e78259de63b2484698485a88558c965b14d422c281f2343"
+  },
+  "kallsyms.txt": {
+    "size": 5750181,
+    "sha256": "2908ecf38591e9509c77c3e0736b08402f04a6a284fbe1e965213cac9475a794"
+  },
+  "btf_blob": {
+    "image_offset": "0x21ef2ac",
+    "length": 6094556
+  },
+  "kernel_image": {
+    "text_offset": 0,
+    "kimage_text_base": "0xffffffc008000000"
+  }
+}
