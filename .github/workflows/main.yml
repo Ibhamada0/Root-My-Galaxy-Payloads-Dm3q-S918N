@@ -1,16 +1,21 @@
 name: Build Debug APK
 
 # يبني نسخة الـ debug فقط من تطبيق Root My Galaxy ثم يرفعها كـ
-# artifact واحد. الـ release APK ومشتقّاته (keystore, apksigner,
-# GitHub Release) مزالتين بالكامل لتجنّب الفشل اللي حصل في الـ
-# run اللي فات.
+# artifact واحد. تم حذف جميع خطوات الـ release (signing, apksigner,
+# GitHub Release) لتجنّب الفشل اللي حصل في الـ run السابق
+# (build/release apk = fail). الـ debug وحده يكفي للتجربة على الجهاز.
+# تم تعديل تركيب الـ on: لتفادي الـ error:
+#   Unexpected value 'tags' (Line 13, Col: 3)
 
 on:
   push:
-    branches: ["main", "master"]
+    branches:
+      - main
+      - master
   pull_request:
-    branches: ["main", "master"]
-  tags: ["v*"]
+    branches:
+      - main
+      - master
   workflow_dispatch:
 
 permissions:
